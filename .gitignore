@@ -10,6 +10,6 @@ _build
 .merlin
 
 ## Project specific
-lib
-doc
-bin
+/lib
+/doc
+/bin

@@ -1,0 +1,8 @@
+(jbuild_version 1)
+
+(library
+ ((name sourcil)
+  (public_name sourcil)
+  (preprocess (pps (ppx_deriving.std)))
+  (libraries (morsmall))
+  (flags (:standard -w +A-4))))

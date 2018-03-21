@@ -2,6 +2,7 @@
 
 build:
 	jbuilder build @install
+	ln -sf _build/install/default/bin bin
 
 install:
 	jbuilder install
@@ -11,8 +12,8 @@ uninstall:
 
 doc:
 	jbuilder build @doc
-	ln -s _build/default/_doc doc
+	ln -sf _build/default/_doc doc
 
 clean:
 	jbuilder clean
-	rm -f doc
+	rm -f bin doc
