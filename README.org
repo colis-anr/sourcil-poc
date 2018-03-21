@@ -1,0 +1,2 @@
+#+TITLE: SourCIL
+#+STARTUP: indent inlineimages

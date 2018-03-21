@@ -1,0 +1,12 @@
+opam-version: "1.2"
+name: "SourCIL"
+version: "0.1"
+maintainer: ["Nicolas Jeannerod nicolas.jeannerod@irif.fr"]
+author: ["Nicolas Jeannerod nicolas.jeannerod@irif.fr"]
+homepage: "https://github.com/colis-anr/sourcil"
+bug-reports: "https://github.com/colis-anr/sourcil/issues"
+license: "GPL3"
+dev-repo: "https://github.com/colis-anr/sourcil"
+build: [
+  ["jbuilder" "build" "-p" name "-j" jobs]
+]
