@@ -56,6 +56,7 @@ let commands_with_no_output =
 let rec command__to__condition ?(redirected=false) = function
 
   | Simple _ as simple ->
+     (* Not simple command: the words may not have subshells in them. *)
      let call = simple__to__call simple in
      if redirected then
        AST.CCall call
