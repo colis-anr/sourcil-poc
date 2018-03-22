@@ -24,6 +24,13 @@ open Morsmall.AST
 open Morsmall.Location
 open Errors
 
+let rec collect_redirections = function
+  | Redirection { command ; descr ; kind ; file } ->
+     let (redirections, command) = collect_redirections command.value in
+     ((descr, kind, file) :: redirections, command)
+  | _ as command ->
+     ([], command)
+
 let word__to__name word = word (*FIXME*)
 let word__to__literal word = word (*FIXME*)
 let word__to__expression word = word (*FIXME*)
@@ -40,47 +47,88 @@ let simple__to__call = function
 
   | _ -> assert false
 
-let command__to__condition = function
+(* Morsmall.AST.command -> Sourcil.AST.condition *)
+
+let commands_with_no_output =
+  (* Here, we can safely add any command that has "STDOUT: Not used" in the documentation. *)
+  [ "[" ; "test" ]
+
+let rec command__to__condition ?(redirected=false) = function
 
   | Simple _ as simple ->
-     simple__to__call simple
+     let call = simple__to__call simple in
+     if redirected then
+       AST.CCall call
+     else
+       (
+         if List.mem call.AST.name commands_with_no_output then
+           AST.CCall call
+         else
+           raise (NotSupported (dummy_position, Format.sprintf "command '%s' in conditions with no redirection of their output towards /dev/null" call.AST.name))
+       )
 
-  | _ ->
-     raise (NotSupported (dummy_position, "nothing supported in conditions but simple commands"))
+  | Async _ -> raise (NotSupported (dummy_position, "& in conditions"))
+  | Seq _ -> raise (NotSupported (dummy_position, "sequence in conditions"))
+
+  | And (first, second) ->
+     AST.CAnd (command__to__condition first.value,
+               command__to__condition second.value)
+  | Or (first, second) ->
+     AST.COr (command__to__condition first.value,
+              command__to__condition second.value)
+  | Not command ->
+     AST.CNot (command__to__condition command.value)
+
+  | Pipe _ -> raise (NotSupported (dummy_position, "pipe in conditions"))
+  | Subshell _ -> raise (NotSupported (dummy_position, "subshell in conditions"))
+  | For _ -> raise (NotSupported (dummy_position, "for in conditions"))
+  | Case _ -> raise (NotSupported (dummy_position, "case in conditions"))
+  | If _ -> raise (NotSupported (dummy_position, "if in conditions"))
+  | While _ -> raise (NotSupported (dummy_position, "while in conditions"))
+  | Until _ -> raise (NotSupported (dummy_position, "until in conditions"))
+  | Function _ -> raise (NotSupported (dummy_position, "function in conditions"))
+
+  | Redirection _ as command ->
+     let (redirections, command) = collect_redirections command in
+     (* Redirections are accepted if there is a >/dev/null *)
+     if
+       List.exists
+         (function (1, Output, "/dev/null") -> true
+                 | _ -> false)
+         redirections
+       &&
+         List.for_all
+           (function (1, Output, "/dev/null") | (_, OutputDuplicate, "1") -> true
+                     | _ -> false)
+           redirections
+     then
+       command__to__condition ~redirected:true command
+     else
+       raise (NotSupported (dummy_position, "redirections without >/dev/null in conditions"))
+
+  | HereDocument _ -> raise (NotSupported (dummy_position, "here document in conditions"))
+
+(* Morsmall.AST.command -> Sourcil.AST.statement *)
 
 let rec command__to__statement = function
 
   | Simple _ as simple ->
      AST.Call (simple__to__call simple)
 
-  | Async _ ->
-     raise (NotSupported (dummy_position, "the asynchronous separator & is not supported"))
+  | Async _ -> raise (NotSupported (dummy_position, "the asynchronous separator & is not supported"))
 
   | Seq (first, second) ->
      AST.Seq
        { first = command__to__statement first.value ;
          second = command__to__statement second.value }
 
-  | And _ ->
-     raise (NotSupported (dummy_position, "and"))
-
-  | Or _ ->
-     raise (NotSupported (dummy_position, "or"))
-
-  | Not _ ->
-     raise (NotSupported (dummy_position, "not"))
-
-  | Pipe _ ->
-     raise (NotSupported (dummy_position, "pipe"))
-
-  | Subshell _ ->
-     raise (NotSupported (dummy_position, "subshell"))
-
-  | For _ ->
-     raise (NotSupported (dummy_position, "for"))
-
-  | Case _ ->
-     raise (NotSupported (dummy_position, "case"))
+  | And _ -> raise (NotSupported (dummy_position, "and"))
+  | Or _ -> raise (NotSupported (dummy_position, "or"))
+  | Not _ -> raise (NotSupported (dummy_position, "not"))
+  | Pipe _ -> raise (NotSupported (dummy_position, "pipe"))
+  | Subshell _ -> raise (NotSupported (dummy_position, "subshell"))
+  | For _ -> raise (NotSupported (dummy_position, "for"))
+  | Case _ -> raise (NotSupported (dummy_position, "case"))
 
   | If if_clause ->
      AST.If {
@@ -92,17 +140,8 @@ let rec command__to__statement = function
            | Some rest -> command__to__statement rest.value
        }
 
-  | While _ ->
-     raise (NotSupported (dummy_position, "while"))
-
-  | Until _ ->
-     raise (NotSupported (dummy_position, "until"))
-
-  | Function _ ->
-     raise (NotSupported (dummy_position, "function"))
-
-  | Redirection _ ->
-     raise (NotSupported (dummy_position, "redirection"))
-
-  | HereDocument _ ->
-     raise (NotSupported (dummy_position, "here document"))
+  | While _ -> raise (NotSupported (dummy_position, "while"))
+  | Until _ -> raise (NotSupported (dummy_position, "until"))
+  | Function _ -> raise (NotSupported (dummy_position, "function"))
+  | Redirection _ -> raise (NotSupported (dummy_position, "redirection"))
+  | HereDocument _ -> raise (NotSupported (dummy_position, "here document"))

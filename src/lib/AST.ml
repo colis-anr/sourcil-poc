@@ -29,7 +29,11 @@ type call =
   { name : name ;
     arguments : literal list }                                 [@@deriving show]
 
-type condition = call (*FIXME*)                                [@@deriving show]
+type condition =
+  | CCall of call
+  | CAnd of condition * condition
+  | COr of condition * condition
+  | CNot of condition                                          [@@deriving show]
 
 type statement =
 
