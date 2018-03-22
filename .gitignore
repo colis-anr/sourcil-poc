@@ -5,11 +5,12 @@
 *#
 
 ## Dune specific
-_build
+/_build
 *.install
 .merlin
 
 ## Project specific
+*.sh
 /lib
 /doc
 /bin

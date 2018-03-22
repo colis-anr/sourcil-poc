@@ -20,26 +20,21 @@
 (*                                                                            *)
 (******************************************************************************)
 
-let parse_files =
-  List.iter
-    (fun filename ->
-      Format.printf "@[<h 2>Parsing file \"%s\"... @?" filename;
-      (
-        try
-          let ast = Sourcil.parse_file filename in
-          Format.printf "succeeded.@\n  %a" Sourcil.pp_print_debug ast
-        with
-        | Morsmall.SyntaxError(_position, message) ->
-           Format.printf "failed because of a syntax error:@\n  %s" message
-        | Sourcil.NotSupported(_position, message) ->
-           Format.printf "failed because of a non-supported feature:\n  %s" message
-      );
-      Format.printf "@]@.")
-
 let () =
   match List.tl (Array.to_list Sys.argv) with
-  | [] ->
-     Format.eprintf "No file to parse!@.";
+  | [filename] ->
+     (
+       try
+         ignore (Sourcil.parse_file filename);
+         exit 0
+       with
+       | Morsmall.SyntaxError(_position, message) ->
+          Format.eprintf "syntax error: %s@." message;
+          exit 2
+       | Sourcil.NotSupported(_position, message) ->
+          Format.printf "non-supported feature: %s@." message;
+          exit 3
+     )
+  | _ ->
+     Format.printf "Expected only one file to parse.@.";
      exit 1
-  | files ->
-     parse_files files

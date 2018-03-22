@@ -88,7 +88,7 @@ let rec command__to__statement = function
          body = command__to__statement if_clause.body.value ;
          rest =
            match if_clause.rest with
-           | None -> raise (NotSupported (dummy_position, "if with no else part is not supported"))
+           | None -> AST.(Call { name = "true" ; arguments = [] })
            | Some rest -> command__to__statement rest.value
        }
 

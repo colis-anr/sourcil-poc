@@ -1,7 +1,7 @@
 (jbuild_version 1)
 
 (executable
- ((name main)
+ ((name sourcil_cmd)
   (public_name sourcil)
   (libraries (ppx_deriving_yojson.runtime sourcil))
   (flags (:standard -w +A))))
