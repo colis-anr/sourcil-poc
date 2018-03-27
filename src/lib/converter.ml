@@ -31,9 +31,19 @@ let rec collect_redirections = function
   | _ as command ->
      ([], command)
 
-let word__to__name word = word (*FIXME*)
-let word__to__literal word = word (*FIXME*)
-let word__to__expression word = word (*FIXME*)
+let word__to__name word =
+  String.iter
+    (fun c ->
+      if List.mem c ['`'; '*'; '?'; '('; '{'] then
+        raise (NotSupported (dummy_position, "forbidden character")))
+    word;
+  word (*FIXME*)
+
+let word__to__literal word =
+  word__to__name word (*FIXME*)
+
+let word__to__expression word =
+  AST.Literal (word__to__literal word) (*FIXME*)
 
 let simple__to__call = function
 
@@ -51,7 +61,7 @@ let simple__to__call = function
 
 let commands_with_no_output =
   (* Here, we can safely add any command that has "STDOUT: Not used" in the documentation. *)
-  [ "[" ; "test" ]
+  [ "[" ; "test" ; "true" ; "false" ]
 
 let rec command__to__condition ?(redirected=false) = function
 
@@ -123,8 +133,17 @@ let rec command__to__statement = function
        { first = command__to__statement first.value ;
          second = command__to__statement second.value }
 
-  | And _ -> raise (NotSupported (dummy_position, "and"))
-  | Or _ -> raise (NotSupported (dummy_position, "or"))
+  | And _ ->
+     (* note: no easy translation to 'if' *)
+     raise (NotSupported (dummy_position, "and"))
+
+  | Or (first, second) ->
+     AST.If {
+         test = command__to__condition first.value ;
+         body = AST.(Call { name = "true" ; arguments = [] }) ;
+         rest = command__to__statement second.value
+       }
+
   | Not _ -> raise (NotSupported (dummy_position, "not"))
   | Pipe _ -> raise (NotSupported (dummy_position, "pipe"))
   | Subshell _ -> raise (NotSupported (dummy_position, "subshell"))

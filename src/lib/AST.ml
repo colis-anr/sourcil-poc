@@ -23,11 +23,12 @@
 type name = string                                             [@@deriving show]
 type literal = string                                          [@@deriving show]
 
-type expression = string (*FIXME*)                             [@@deriving show]
+type expression =
+  | Literal of string                                          [@@deriving show]
 
 type call =
   { name : name ;
-    arguments : literal list }                                 [@@deriving show]
+    arguments : expression list }                              [@@deriving show]
 
 type condition =
   | CCall of call
