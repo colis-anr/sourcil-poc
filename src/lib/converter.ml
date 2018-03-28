@@ -35,7 +35,7 @@ let word__to__name word =
   String.iter
     (fun c ->
       if List.mem c ['`'; '*'; '?'; '('; '{'] then
-        raise (NotSupported (dummy_position, "forbidden character")))
+        raise (NotSupported (dummy_position, "forbidden character: `"^(String.make 1 c)^"'")))
     word;
   word (*FIXME*)
 
