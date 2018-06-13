@@ -22,6 +22,11 @@
 
 open Morsmall.AST
 open Errors
+open AST
+   
+let commands_with_no_output =
+  (* Here, we can safely add any command that has "STDOUT: Not used" in the documentation. *)
+  [ "[" ; "test" ; "true" ; "false" ]
 
 let rec collect_redirections = function
   | Redirection (command, descr, kind, file) ->
@@ -30,17 +35,62 @@ let rec collect_redirections = function
   | _ as command ->
      ([], command)
 
-let word__to__name = function
+and word__to__name = function
+  | [Name l] -> l (* FIXME: we probably want to exclude characters here *)
+  | [Literal l] -> l (* ? *)
+  | [DoubleQuoted _] -> raise (NotSupported "double quotes in name")
+  | [Variable _] -> raise (NotSupported "variable in name")
+  | [Subshell _] -> raise (NotSupported "subshell in name")
+  | [Assignment _] -> raise (NotSupported "assignment in name")
+  | [GlobAll] -> raise (NotSupported "glob * in name")
+  | [GlobAny] -> raise (NotSupported "glob ? in name")
+  | [GlobRange _] -> raise (NotSupported "glob range in name")
+  | [] -> raise (NotSupported "empty name")
+  | _ :: _ :: _ -> raise (NotSupported "name >=2")
+
+and word__to__literal = function
   | [Literal l] -> l
-  | _ -> raise (NotSupported ("name other than literal"))
+  | _ -> raise (NotSupported "literal other than literal")
 
-let word__to__literal word =
-  word__to__name word (*FIXME*)
+and word_component_double_quoted__to__expression_component = function
+  | Name n -> ELiteral n
+  | Literal l -> ELiteral l
+  | Variable v -> EVariable v
+  | Subshell c -> ESubshell (command_list__to__statement_list c)
 
-let word__to__expression word =
-  AST.Literal (word__to__literal word) (*FIXME*)
+  | DoubleQuoted _ -> assert false
+  | GlobAll -> assert false
+  | GlobAny -> assert false
+  | GlobRange _ -> assert false
+  | Assignment _ -> assert false
 
-let simple__to__call = function
+and word_double_quoted__to__expression word =
+  List.map word_component_double_quoted__to__expression_component word
+
+and word_component__to__expression = function
+  | Name n -> [AST.ELiteral n]
+  | Literal l -> [AST.ELiteral l]
+  | Variable v -> [AST.ESplitVariable v]
+  | DoubleQuoted w -> word_double_quoted__to__expression w
+  | Subshell c -> [AST.ESplitSubshell (command_list__to__statement_list c)]
+
+  | Assignment _ -> raise (NotSupported "assignment")
+  | GlobAll -> raise (NotSupported "glob *")
+  | GlobAny -> raise (NotSupported "glob ?")
+  | GlobRange _ -> raise (NotSupported "char range")
+
+and word__to__expression word =
+  List.map word_component__to__expression word
+  |> List.flatten
+
+and word__to__pattern_component = function
+  | [Literal l] -> PLiteral l
+  | _ -> raise (NotSupported "pattern other than literal")
+  
+and pattern__to__pattern pattern =
+  List.map word__to__pattern_component pattern
+  
+and simple__to__call = function
   | Simple ([], []) ->
      assert false
   | Simple ([], word :: words) ->
@@ -52,11 +102,7 @@ let simple__to__call = function
 
 (* Morsmall.AST.command -> Sourcil.AST.condition *)
 
-let commands_with_no_output =
-  (* Here, we can safely add any command that has "STDOUT: Not used" in the documentation. *)
-  [ "[" ; "test" ; "true" ; "false" ]
-
-let rec command__to__condition ?(redirected=false) = function
+and command__to__condition ?(redirected=false) = function
 
   | Simple _ as simple ->
      (* Not simple command: the words may not have subshells in them. *)
@@ -114,40 +160,73 @@ let rec command__to__condition ?(redirected=false) = function
 
 (* Morsmall.AST.command -> Sourcil.AST.statement *)
 
-let rec command__to__statement = function
+and command__to__statement = function
 
   | Simple _ as simple ->
-     AST.Call (simple__to__call simple)
+     SCall (simple__to__call simple)
 
-  | Async _ -> raise (NotSupported ("the asynchronous separator & is not supported"))
+  | Async _ ->
+     raise (NotSupported ("the asynchronous separator & is not supported"))
 
   | Seq (first, second) ->
-     AST.Seq (command__to__statement first, command__to__statement second)
+     SSeq (command__to__statement first, command__to__statement second)
 
   | And _ ->
      (* note: no easy translation to 'if' *)
      raise (NotSupported ("and"))
 
   | Or (first, second) ->
-     AST.If (command__to__condition first,
-             AST.Call ("true", []),
-             command__to__statement second)
+     SIf (command__to__condition first,
+          SCall ("true", []),
+          command__to__statement second)
 
-  | Not _ -> raise (NotSupported ("not"))
-  | Pipe _ -> raise (NotSupported ("pipe"))
-  | Subshell _ -> raise (NotSupported ("subshell"))
-  | For _ -> raise (NotSupported ("for"))
-  | Case _ -> raise (NotSupported ("case"))
+  | Not _ ->
+     (* no easy translation to 'if' *)
+     raise (NotSupported ("not"))
+
+  | Pipe (first, second) ->
+     SPipe (command__to__statement first,
+            command__to__statement second)
+
+  | Subshell command ->
+     SSubshell (command_list__to__statement_list [command]) (*FIXME*)
+
+  | For (_, None, _) ->
+     raise (NotSupported "for with no list")
+
+  | For (name, Some literals, command) ->
+     SForeach (name,
+               List.map word__to__literal literals,
+               command__to__statement command)
+
+  | Case (w, cil) ->
+     SCase (word__to__expression w,
+            List.map case_item__to__case_item cil)
 
   | If (test, body, rest) ->
-     AST.If (command__to__condition test,
-             command__to__statement body,
-             match rest with
-             | None -> AST.Call ("true", [])
-             | Some rest -> command__to__statement rest)
+     SIf (command__to__condition test,
+          command__to__statement body,
+          match rest with
+          | None -> SCall ("true", [])
+          | Some rest -> command__to__statement rest)
 
-  | While _ -> raise (NotSupported ("while"))
-  | Until _ -> raise (NotSupported ("until"))
+  | While (cond, body) ->
+     SWhile (command__to__condition cond,
+             command__to__statement body)
+
+  | Until (cond, body) ->
+     SWhile (CNot (command__to__condition cond),
+             command__to__statement body)
+
   | Function _ -> raise (NotSupported ("function"))
   | Redirection _ -> raise (NotSupported ("redirection"))
   | HereDocument _ -> raise (NotSupported ("here document"))
+
+and case_item__to__case_item = function
+  | (pattern, Some command) ->
+     (pattern__to__pattern pattern, command__to__statement command)
+  | (_, None) ->
+     raise (NotSupported ("case item with empty command"))
+
+and command_list__to__statement_list cl =
+  List.map command__to__statement cl

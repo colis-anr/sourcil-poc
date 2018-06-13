@@ -23,22 +23,41 @@
 type name = string                                             [@@deriving show]
 type literal = string                                          [@@deriving show]
 
-type expression =
-  | Literal of string                                          [@@deriving show]
+type expression_component =
+  | ELiteral of string
+  | EVariable of name
+  | ESplitVariable of name
+  | ESubshell of statement_list
+  | ESplitSubshell of statement_list                            [@@deriving show]
 
-type call = name * expression list                             [@@deriving show]
+and expression = expression_component list                                [@@deriving show]
 
-type condition =
+and pattern_component =
+  | PLiteral of string
+
+and pattern =
+  pattern_component list
+             
+and call = name * expression list                              [@@deriving show]
+
+and condition =
   | CCall of call
   | CAnd of condition * condition
   | COr of condition * condition
   | CNot of condition                                          [@@deriving show]
 
-type statement =
-  | Assign of name * expression
-  | Seq of statement * statement
-  | Call of call (*FIXME: Call, CallFunction, CallBuiltin?*)
-  | If of condition * statement * statement
-  | Foreach of name * literal list * statement                 [@@deriving show]
+and statement =
+  | SAssign of name * expression
+  | SSeq of statement * statement
+  | SCall of call (*FIXME: Call, CallFunction, CallBuiltin?*)
+  | SSubshell of statement_list
+  | SIf of condition * statement * statement
+  | SPipe of statement * statement
+  | SWhile of condition * statement
+  | SCase of expression * case_item list
+  | SForeach of name * literal list * statement                 [@@deriving show]
 
-type statement_list = statement list                           [@@deriving show]
+and case_item =
+  pattern * statement
+
+and statement_list = statement list                            [@@deriving show]
