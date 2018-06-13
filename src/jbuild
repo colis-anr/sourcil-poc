@@ -1,0 +1,14 @@
+(library
+ ((name sourcil)
+  (public_name sourcil)
+  (preprocess (pps (ppx_deriving.std)))
+  (libraries (morsmall))
+  (flags (:standard -w +A-4))
+  (modules (:standard \ sourcil_cmd))))
+
+(executable
+ ((name sourcil_cmd)
+  (public_name sourcil)
+  (libraries (ppx_deriving_yojson.runtime sourcil))
+  (flags (:standard -w +A))
+  (modules (sourcil_cmd))))
