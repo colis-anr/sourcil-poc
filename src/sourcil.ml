@@ -25,7 +25,8 @@ module AST = AST
 include Errors
            
 let parse_file filename =
-  let asts = Morsmall.parse_file filename in
+  let lasts = Morsmall.parse_file filename in
+  let asts = List.map Morsmall.strip_locations lasts in
   List.map Converter.command__to__statement asts
 
 let pp_print_debug = AST.pp_statement_list

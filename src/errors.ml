@@ -20,4 +20,4 @@
 (*                                                                            *)
 (******************************************************************************)
 
-exception NotSupported of Morsmall.Location.position * string
+exception NotSupported of string

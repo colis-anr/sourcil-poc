@@ -31,7 +31,7 @@ let () =
        | Morsmall.SyntaxError(_position, message) ->
           Format.eprintf "syntax error: %s@." message;
           exit 2
-       | Sourcil.NotSupported(_position, message) ->
+       | Sourcil.NotSupported(message) ->
           Format.printf "non-supported feature: %s@." message;
           exit 3
      )

@@ -26,9 +26,7 @@ type literal = string                                          [@@deriving show]
 type expression =
   | Literal of string                                          [@@deriving show]
 
-type call =
-  { name : name ;
-    arguments : expression list }                              [@@deriving show]
+type call = name * expression list                             [@@deriving show]
 
 type condition =
   | CCall of call
@@ -37,27 +35,10 @@ type condition =
   | CNot of condition                                          [@@deriving show]
 
 type statement =
-
-  | Assign of
-      { variable : name ;
-        expression : expression }
-
-  | Seq of
-      { first : statement ;
-        second : statement }
-
+  | Assign of name * expression
+  | Seq of statement * statement
   | Call of call (*FIXME: Call, CallFunction, CallBuiltin?*)
-
-  | If of
-      { test : condition ;
-        body : statement ;
-        rest : statement }
-
-  | Foreach of
-      { variable : name ;
-        literals : literal list ;
-        body : statement }
-
-[@@deriving show]
+  | If of condition * statement * statement
+  | Foreach of name * literal list * statement                 [@@deriving show]
 
 type statement_list = statement list                           [@@deriving show]

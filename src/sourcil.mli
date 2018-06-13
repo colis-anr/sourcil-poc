@@ -22,7 +22,7 @@
 
 module AST = AST
 
-exception NotSupported of Morsmall.Location.position * string
+exception NotSupported of string
 
 val parse_file : string -> AST.statement list
 

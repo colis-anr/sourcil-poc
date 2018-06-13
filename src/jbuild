@@ -10,5 +10,5 @@
  ((name sourcil_cmd)
   (public_name sourcil)
   (libraries (ppx_deriving_yojson.runtime sourcil))
-  (flags (:standard -w +A))
+  (flags (:standard -w +A-4))
   (modules (sourcil_cmd))))
