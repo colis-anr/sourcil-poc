@@ -42,6 +42,7 @@ and call = name * expression list                              [@@deriving show]
 
 and condition =
   | CCall of call
+  | CIgnore of condition
   | CAnd of condition * condition
   | COr of condition * condition
   | CNot of condition                                          [@@deriving show]
@@ -55,6 +56,7 @@ and statement =
   | SPipe of statement * statement
   | SWhile of condition * statement
   | SCase of expression * case_item list
+  | SIgnore of statement
   | SForeach of name * literal list * statement                 [@@deriving show]
 
 and case_item =

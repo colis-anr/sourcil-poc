@@ -23,19 +23,8 @@
 open Morsmall.AST
 open Errors
 open AST
-   
-let commands_with_no_output =
-  (* Here, we can safely add any command that has "STDOUT: Not used" in the documentation. *)
-  [ "[" ; "test" ; "true" ; "false" ]
 
-let rec collect_redirections = function
-  | Redirection (command, descr, kind, file) ->
-     let (redirections, command) = collect_redirections command in
-     ((descr, kind, file) :: redirections, command)
-  | _ as command ->
-     ([], command)
-
-and word__to__name = function
+let rec word__to__name = function
   | [Name l] -> l (* FIXME: we probably want to exclude characters here *)
   | [Literal l] -> l (* ? *)
   | [DoubleQuoted _] -> raise (NotSupported "double quotes in name")
@@ -86,10 +75,10 @@ and word__to__expression word =
 and word__to__pattern_component = function
   | [Literal l] -> PLiteral l
   | _ -> raise (NotSupported "pattern other than literal")
-  
+
 and pattern__to__pattern pattern =
   List.map word__to__pattern_component pattern
-  
+
 and simple__to__call = function
   | Simple ([], []) ->
      assert false
@@ -102,32 +91,22 @@ and simple__to__call = function
 
 (* Morsmall.AST.command -> Sourcil.AST.condition *)
 
-and command__to__condition ?(redirected=false) = function
-
+and command__to__condition = function
   | Simple _ as simple ->
-     (* Not simple command: the words may not have subshells in them. *)
-     let (name, expressions) = simple__to__call simple in
-     if redirected then
-       AST.CCall (name, expressions)
-     else
-       (
-         if List.mem name commands_with_no_output then
-           AST.CCall (name, expressions)
-         else
-           raise (NotSupported (Format.sprintf "command '%s' in conditions with no redirection of their output towards /dev/null" name))
-       )
+     (* FIXME: the words may not have subshells in them. *)
+     CCall (simple__to__call simple)
 
   | Async _ -> raise (NotSupported ("& in conditions"))
   | Seq _ -> raise (NotSupported ("sequence in conditions"))
 
   | And (first, second) ->
-     AST.CAnd (command__to__condition first,
-               command__to__condition second)
+     CAnd (command__to__condition first,
+           command__to__condition second)
   | Or (first, second) ->
-     AST.COr (command__to__condition first,
-              command__to__condition second)
+     COr (command__to__condition first,
+          command__to__condition second)
   | Not command ->
-     AST.CNot (command__to__condition command)
+     CNot (command__to__condition command)
 
   | Pipe _ -> raise (NotSupported ("pipe in conditions"))
   | Subshell _ -> raise (NotSupported ("subshell in conditions"))
@@ -138,25 +117,12 @@ and command__to__condition ?(redirected=false) = function
   | Until _ -> raise (NotSupported ("until in conditions"))
   | Function _ -> raise (NotSupported ("function in conditions"))
 
-  | Redirection _ as command ->
-     let (redirections, command) = collect_redirections command in
-     (* Redirections are accepted if there is a >/dev/null *)
-     if
-       List.exists
-         (function (1, Output, [Literal "/dev/null"]) -> true
-                 | _ -> false)
-         redirections
-       &&
-         List.for_all
-           (function (1, Output, [Literal "/dev/null"]) | (_, OutputDuplicate, [Literal "1"]) -> true
-                     | _ -> false)
-           redirections
-     then
-       command__to__condition ~redirected:true command
-     else
-       raise (NotSupported ("redirections without >/dev/null in conditions"))
-
-  | HereDocument _ -> raise (NotSupported ("here document in conditions"))
+  | Redirection (command, 1, Output, [Literal "/dev/null"]) ->
+     CIgnore (command__to__condition command)
+  | Redirection _ ->
+     raise (NotSupported ("other redirections in conditions"))
+  | HereDocument _ ->
+     raise (NotSupported ("here document in conditions"))
 
 (* Morsmall.AST.command -> Sourcil.AST.statement *)
 
@@ -219,8 +185,14 @@ and command__to__statement = function
              command__to__statement body)
 
   | Function _ -> raise (NotSupported ("function"))
-  | Redirection _ -> raise (NotSupported ("redirection"))
-  | HereDocument _ -> raise (NotSupported ("here document"))
+
+  | Redirection (command, 1, Output, [Literal "/dev/null"]) ->
+     SIgnore (command__to__statement command)
+
+  | Redirection _ ->
+     raise (NotSupported ("other redirections"))
+  | HereDocument _ ->
+     raise (NotSupported ("here document"))
 
 and case_item__to__case_item = function
   | (pattern, Some command) ->
