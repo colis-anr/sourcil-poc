@@ -30,18 +30,18 @@ type expression_component =
   | ESubshell of statement_list
   | ESplitSubshell of statement_list                            [@@deriving show]
 
-and expression = expression_component list                                [@@deriving show]
+and expression = expression_component list                      [@@deriving show]
 
 and pattern_component =
   | PLiteral of string
 
 and pattern =
   pattern_component list
-             
+
 and call = name * expression list                              [@@deriving show]
 
 and condition =
-  | CCall of call
+  | CCall of call (* invariant : pure *)
   | CIgnore of condition
   | CAnd of condition * condition
   | COr of condition * condition

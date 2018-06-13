@@ -24,6 +24,21 @@ open Morsmall.AST
 open Errors
 open AST
 
+let redirection_as_ignore command =
+  let rec redirection_as_ignore_aux todevnull = function
+    | Redirection (command, 1, Output, [Literal "/dev/null"]) ->
+       redirection_as_ignore_aux true command
+    | Redirection (command, _, OutputDuplicate, [Literal "1"]) ->
+       redirection_as_ignore_aux todevnull command
+    | Redirection _ -> None
+    | _ as command ->
+       if todevnull then
+         Some command
+       else
+         None
+  in
+  redirection_as_ignore_aux false command
+
 let rec word__to__name = function
   | [Name l] -> l (* FIXME: we probably want to exclude characters here *)
   | [Literal l] -> l (* ? *)
@@ -41,35 +56,42 @@ and word__to__literal = function
   | [Literal l] -> l
   | _ -> raise (NotSupported "literal other than literal")
 
-and word_component_double_quoted__to__expression_component = function
+and word_component_double_quoted__to__expression_component ?(pure=false) = function
   | Name n -> ELiteral n
   | Literal l -> ELiteral l
   | Variable v -> EVariable v
-  | Subshell c -> ESubshell (command_list__to__statement_list c)
+  | Subshell c when not pure -> ESubshell (command_list__to__statement_list c)
 
+  | Subshell _ -> raise (NotSupported "subshell in pure expression")
   | DoubleQuoted _ -> assert false
   | GlobAll -> assert false
   | GlobAny -> assert false
   | GlobRange _ -> assert false
   | Assignment _ -> assert false
 
-and word_double_quoted__to__expression word =
-  List.map word_component_double_quoted__to__expression_component word
+and word_double_quoted__to__expression ?(pure=false) word =
+  List.map (word_component_double_quoted__to__expression_component ~pure) word
 
-and word_component__to__expression = function
-  | Name n -> [AST.ELiteral n]
-  | Literal l -> [AST.ELiteral l]
-  | Variable v -> [AST.ESplitVariable v]
-  | DoubleQuoted w -> word_double_quoted__to__expression w
-  | Subshell c -> [AST.ESplitSubshell (command_list__to__statement_list c)]
+and word_component__to__expression ?(pure=false) = function
+  | Name n ->
+     [AST.ELiteral n]
+  | Literal l ->
+     [AST.ELiteral l]
+  | Variable v ->
+     [AST.ESplitVariable v]
+  | DoubleQuoted w ->
+     word_double_quoted__to__expression ~pure w
+  | Subshell c when not pure ->
+     [AST.ESplitSubshell (command_list__to__statement_list c)]
 
+  | Subshell _ -> raise (NotSupported "subshell in pure expression")
   | Assignment _ -> raise (NotSupported "assignment")
   | GlobAll -> raise (NotSupported "glob *")
   | GlobAny -> raise (NotSupported "glob ?")
   | GlobRange _ -> raise (NotSupported "char range")
 
-and word__to__expression word =
-  List.map word_component__to__expression word
+and word__to__expression ?(pure=false) word =
+  List.map (word_component__to__expression ~pure) word
   |> List.flatten
 
 and word__to__pattern_component = function
@@ -79,11 +101,12 @@ and word__to__pattern_component = function
 and pattern__to__pattern pattern =
   List.map word__to__pattern_component pattern
 
-and simple__to__call = function
+and simple__to__call ?(pure=false) = function
   | Simple ([], []) ->
      assert false
   | Simple ([], word :: words) ->
-     (word__to__name word, List.map (fun word -> word__to__expression word) words)
+     (word__to__name word,
+      List.map (word__to__expression ~pure) words)
   | Simple _ ->
      raise (NotSupported ("local assignments are not supported in simple command"))
 
@@ -93,8 +116,7 @@ and simple__to__call = function
 
 and command__to__condition = function
   | Simple _ as simple ->
-     (* FIXME: the words may not have subshells in them. *)
-     CCall (simple__to__call simple)
+     CCall (simple__to__call ~pure:true simple)
 
   | Async _ -> raise (NotSupported ("& in conditions"))
   | Seq _ -> raise (NotSupported ("sequence in conditions"))
@@ -117,10 +139,13 @@ and command__to__condition = function
   | Until _ -> raise (NotSupported ("until in conditions"))
   | Function _ -> raise (NotSupported ("function in conditions"))
 
-  | Redirection (command, 1, Output, [Literal "/dev/null"]) ->
-     CIgnore (command__to__condition command)
-  | Redirection _ ->
-     raise (NotSupported ("other redirections in conditions"))
+  | Redirection _ as command ->
+     (
+       match redirection_as_ignore command with
+       | None -> raise (NotSupported ("other redirections in conditions"))
+       | Some command -> CIgnore (command__to__condition command)
+     )
+
   | HereDocument _ ->
      raise (NotSupported ("here document in conditions"))
 
@@ -186,11 +211,14 @@ and command__to__statement = function
 
   | Function _ -> raise (NotSupported ("function"))
 
-  | Redirection (command, 1, Output, [Literal "/dev/null"]) ->
-     SIgnore (command__to__statement command)
+  | Redirection _ as command ->
+     (
+       match redirection_as_ignore command with
+       | None -> raise (NotSupported ("other redirections"))
+       | Some command ->
+          SIgnore (command__to__statement command)
+     )
 
-  | Redirection _ ->
-     raise (NotSupported ("other redirections"))
   | HereDocument _ ->
      raise (NotSupported ("here document"))
 
