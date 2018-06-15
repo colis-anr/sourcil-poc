@@ -25,19 +25,23 @@ open Errors
 open AST
 
 let redirection_as_ignore command =
-  let rec redirection_as_ignore_aux todevnull = function
-    | Redirection (command, 1, Output, [Literal "/dev/null"]) ->
-       redirection_as_ignore_aux true command
-    | Redirection (command, _, OutputDuplicate, [Literal "1"]) ->
-       redirection_as_ignore_aux todevnull command
+  (* We accept all the redirections starting with >/dev/null and
+     followed by only i>&1 where i isn't 0 or 1. *)
+  let rec redirection_as_ignore_aux first_redirection = function
+    | Redirection (command, 1, Output, [Literal "/dev/null"])
+         when first_redirection ->
+       redirection_as_ignore_aux false command
+    | Redirection (command, descr, Output, [Literal "/dev/null"])
+         when descr <> 0 && descr <> 1 ->
+       redirection_as_ignore_aux first_redirection command
+    | Redirection (command, descr, OutputDuplicate, [Literal "1"])
+         when descr <> 0 && descr <> 1 && not (first_redirection) ->
+       redirection_as_ignore_aux false command
     | Redirection _ -> None
-    | _ as command ->
-       if todevnull then
-         Some command
-       else
-         None
+    | _ as command when not (first_redirection) -> Some command
+    | _ -> None
   in
-  redirection_as_ignore_aux false command
+  redirection_as_ignore_aux true command
 
 let rec word__to__name = function
   | [Name l] -> l (* FIXME: we probably want to exclude characters here *)
