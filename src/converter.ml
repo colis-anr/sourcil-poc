@@ -28,7 +28,7 @@ let special_builtins = [
     "exit"; "export"; "readonly"; "return"; "set";
     "shift"; "times"; "trap"; "unset" ]
 (* cd is not in that list because it is technically not a special built-in! *)
-                     
+
 let rec word__to__name = function
   | [Name l] -> l (* FIXME: we probably want to exclude characters here *)
   | [Literal l] -> l (* ? *)
@@ -50,7 +50,7 @@ and word_component_double_quoted__to__expression_component = function
   | Name n -> AST.ELiteral n
   | Literal l -> AST.ELiteral l
   | Variable v -> AST.EVariable (false, v)
-  | Subshell c -> AST.ESubshell (false, command_list__to__statement_list c)
+  | Subshell c -> AST.ESubshell (false, command_list__to__statement c)
 
   | DoubleQuoted _ -> assert false
   | GlobAll -> assert false
@@ -71,7 +71,7 @@ and word_component__to__expression = function
   | DoubleQuoted w ->
      word_double_quoted__to__expression w
   | Subshell c ->
-     [AST.ESubshell (true, command_list__to__statement_list c)]
+     [AST.ESubshell (true, command_list__to__statement c)]
 
   | Assignment _ -> raise (NotSupported "assignment")
   | GlobAll -> raise (NotSupported "glob *")
@@ -108,7 +108,8 @@ and command__to__statement = function
   | Simple (assignment :: assignments, []) ->
      List.fold_left
        (fun statement assignment ->
-         AST.Seq (statement, assignment__to__assign assignment))
+         let assign = assignment__to__assign assignment in
+         AST.Seq (statement, assign))
        (assignment__to__assign assignment)
        assignments
 
@@ -118,63 +119,83 @@ and command__to__statement = function
      if name = "eval" then
        raise (NotSupported "eval")
      else if List.mem name special_builtins then
-       ( assert (assignments = []);
-         AST.CallSpecial (name, args) )
-         (* FIXME: functions then cd *)
+       (
+         assert (assignments = []);
+         AST.CallSpecial (name, args)
+       )
+         (* FIXME: functions and cd *)
      else
-       AST.Subshell (
+       (
+         let command =
            List.fold_right
              (fun assignment statement ->
-               AST.Seq (assignment__to__assign assignment, statement))
+               let assign = assignment__to__assign assignment in
+               (* FIXME: export *)
+               AST.Seq (assign, statement))
              assignments
              (AST.Call (name, args))
-         )
+         in
+         AST.Subshell command
+       )
 
   | Async _ ->
      raise (NotSupported ("the asynchronous separator & is not supported"))
 
   | Seq (first, second) ->
-     AST.Seq (command__to__statement first,
-              command__to__statement second)
+     let first = command__to__statement first in
+     let second = command__to__statement second in
+     AST.Seq (first, second)
 
   | And (first, second) ->
-     AST.If (command__to__statement first,
-             command__to__statement second,
-             AST.Not (AST.Call ("false", [])))
+     let first = command__to__statement first in
+     let second = command__to__statement second in
+     AST.If (first, second, AST.Not (AST.Call ("false", [])))
 
   | Or (first, second) ->
-     AST.If (command__to__statement first,
-             AST.Call ("true", []),
-             command__to__statement second)
+     let first = command__to__statement first in
+     let second = command__to__statement second in
+     AST.If (first, AST.Call ("true", []), second)
 
   | Not command ->
-     AST.Not (command__to__statement command)
+     let statement = command__to__statement command in
+     AST.Not statement
 
   | Pipe (first, second) ->
-     AST.Pipe (command__to__statement first,
-               command__to__statement second)
+     let first = command__to__statement first in
+     let second = command__to__statement second in
+     AST.Pipe (first, second)
 
   | Subshell command ->
-     AST.Subshell (command__to__statement command) (*FIXME*)
+     let statement = command__to__statement command in
+     AST.Subshell statement
 
   | For (_, None, _) ->
      raise (NotSupported "for with no list")
 
   | For (name, Some literals, command) ->
-     AST.Foreach (name,
-                  List.map word__to__literal literals,
-                  command__to__statement command)
+     let statement = command__to__statement command in
+     AST.Foreach (name, List.map word__to__literal literals, statement)
 
   | Case (w, cil) ->
-     AST.Case (word__to__expression w,
-               List.map case_item__to__case_item cil)
+     let cil =
+       List.fold_right
+         (fun ci cil ->
+           let ci = case_item__to__case_item ci in
+           ci :: cil)
+         cil []
+     in
+     AST.Case (word__to__expression w, cil)
 
-  | If (test, body, rest) ->
-     AST.If (command__to__statement test,
-             command__to__statement body,
-             match rest with
-             | None -> AST.Call ("true", [])
-             | Some rest -> command__to__statement rest)
+  | If (test, body, None) ->
+     let test = command__to__statement test in
+     let body = command__to__statement body in
+     AST.If (test, body, AST.Call ("true", []))
+
+  | If (test, body, Some rest) ->
+     let test = command__to__statement test in
+     let body = command__to__statement body in
+     let rest = command__to__statement rest in
+     AST.If (test, body, rest)
 
   | While (cond, body) ->
      AST.While (command__to__statement cond,
@@ -183,7 +204,8 @@ and command__to__statement = function
   | Until (_cond, _body) ->
      raise (NotSupported "until")
 
-  | Function _ -> raise (NotSupported ("function"))
+  | Function _ ->
+     raise (NotSupported ("function"))
 
   | Redirection _ as command ->
      redirection__to__statement command
@@ -229,5 +251,12 @@ and redirection__to__statement = function
 
   | _ -> raise (NotSupported ("other redirections"))
 
-and command_list__to__statement_list cl =
-  List.map command__to__statement cl
+and command_list__to__statement = function
+  | [] -> raise (NotSupported "empty command list")
+  | first :: rest ->
+     List.fold_left
+       (fun statement command ->
+         let statement' = command__to__statement command in
+         AST.Seq (statement, statement'))
+       (command__to__statement first)
+       rest

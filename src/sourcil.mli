@@ -24,6 +24,6 @@ module AST = AST
 
 exception NotSupported of string
 
-val parse_file : string -> AST.statement list
+val parse_file : string -> AST.statement
 
-val pp_print_debug : Format.formatter -> AST.statement list -> unit
+val pp_print_debug : Format.formatter -> AST.statement -> unit

@@ -24,18 +24,18 @@ type name = string                                             [@@deriving show]
 type literal = string                                          [@@deriving show]
 
 type split = bool                                              [@@deriving show]
-             
+
 type expression_component =
   | ELiteral of string
   | EVariable of split * name
-  | ESubshell of split * statement_list
+  | ESubshell of split * statement
 
 and expression = expression_component list
 
 and pattern_component =
   | PLiteral of string
   | PAll
-              
+
 and pattern =
   pattern_component list
 
@@ -56,7 +56,5 @@ and statement =
 
 and case_item =
   pattern * statement
-
-and statement_list = statement list
 
 [@@deriving show]
