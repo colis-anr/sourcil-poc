@@ -29,25 +29,6 @@ let special_builtins = [
     "shift"; "times"; "trap"; "unset" ]
 (* cd is not in that list because it is technically not a special built-in! *)
 
-let redirection_as_ignore command =
-  (* We accept all the redirections starting with >/dev/null and
-     followed by only i>&1 where i isn't 0 or 1. *)
-  let rec redirection_as_ignore_aux first_redirection = function
-    | Redirection (command, 1, Output, [Literal "/dev/null"])
-         when first_redirection ->
-       redirection_as_ignore_aux false command
-    | Redirection (command, descr, Output, [Literal "/dev/null"])
-         when descr <> 0 && descr <> 1 ->
-       redirection_as_ignore_aux first_redirection command
-    | Redirection (command, descr, OutputDuplicate, [Literal "1"])
-         when descr <> 0 && descr <> 1 && not (first_redirection) ->
-       redirection_as_ignore_aux false command
-    | Redirection _ -> None
-    | _ as command when not (first_redirection) -> Some command
-    | _ -> None
-  in
-  redirection_as_ignore_aux true command
-
 let rec word__to__name = function
   | [Name l] -> l (* FIXME: we probably want to exclude characters here *)
   | [Literal l] -> l (* ? *)
@@ -68,8 +49,8 @@ and word__to__literal = function
 and word_component_double_quoted__to__expression_component = function
   | Name n -> AST.ELiteral n
   | Literal l -> AST.ELiteral l
-  | Variable v -> AST.EVariable v
-  | Subshell c -> AST.ESubshell (command_list__to__statement_list c)
+  | Variable v -> AST.EVariable (false, v)
+  | Subshell c -> AST.ESubshell (false, command_list__to__statement_list c)
 
   | DoubleQuoted _ -> assert false
   | GlobAll -> assert false
@@ -86,11 +67,11 @@ and word_component__to__expression = function
   | Literal l ->
      [AST.ELiteral l]
   | Variable v ->
-     [AST.ESplitVariable v]
+     [AST.EVariable (true, v)]
   | DoubleQuoted w ->
      word_double_quoted__to__expression w
   | Subshell c ->
-     [AST.ESplitSubshell (command_list__to__statement_list c)]
+     [AST.ESubshell (true, command_list__to__statement_list c)]
 
   | Assignment _ -> raise (NotSupported "assignment")
   | GlobAll -> raise (NotSupported "glob *")
@@ -199,12 +180,7 @@ and command__to__statement = function
   | Function _ -> raise (NotSupported ("function"))
 
   | Redirection _ as command ->
-     (
-       match redirection_as_ignore command with
-       | None -> raise (NotSupported ("other redirections"))
-       | Some command ->
-          AST.Ignore (command__to__statement command)
-     )
+     redirection__to__statement command
 
   | HereDocument _ ->
      raise (NotSupported ("here document"))
@@ -214,6 +190,36 @@ and case_item__to__case_item = function
      (pattern__to__pattern pattern, command__to__statement command)
   | (_, None) ->
      raise (NotSupported ("case item with empty command"))
+
+and redirection__to__statement = function
+  (* >=2 redirected to /dev/null. Since they don't have any impact on
+     the semantics of the program, we don't care. *)
+  | Redirection (command, descr, Output, [Literal "/dev/null"])
+       when descr >= 2 ->
+     command__to__statement command
+
+  (* 1 redirected to >=2, this means the output will never ever have
+     an impact on the semantics again ==> ignore *)
+  | Redirection (command, 1, OutputDuplicate, [Literal i])
+       when (try int_of_string i >= 2 with Failure _ ->  false) ->
+     AST.Ignore (command__to__statement command)
+
+  (* 1 redirected to /dev/null. This means that the output will never
+     have an impact on the semantics again ==> Ignore. In fact, we can
+     even be a bit better an accept all subsequent redirections of >=2
+     to 1. *)
+  | Redirection (command, 1, Output, [Literal "/dev/null"]) ->
+     (
+       let rec flush_redirections_to_1 = function
+         | Redirection (command, descr, OutputDuplicate, [Literal "1"])
+              when descr >= 2 ->
+            flush_redirections_to_1 command
+         | _ as command -> command
+       in
+       AST.Ignore (command__to__statement (flush_redirections_to_1 command))
+     )
+
+  | _ -> raise (NotSupported ("other redirections"))
 
 and command_list__to__statement_list cl =
   List.map command__to__statement cl

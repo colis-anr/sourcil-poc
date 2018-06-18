@@ -2,3 +2,7 @@
 #+STARTUP: indent inlineimages
 
 proof of concept
+
+* Work Hypothesis
+- The outputs 2 to 9 have no impact on the semantics of the
+  program. All we consider is 0 (stdin) and 1 (stdout)

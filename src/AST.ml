@@ -23,12 +23,12 @@
 type name = string                                             [@@deriving show]
 type literal = string                                          [@@deriving show]
 
+type split = bool                                              [@@deriving show]
+             
 type expression_component =
   | ELiteral of string
-  | EVariable of name
-  | ESplitVariable of name
-  | ESubshell of statement_list
-  | ESplitSubshell of statement_list
+  | EVariable of split * name
+  | ESubshell of split * statement_list
 
 and expression = expression_component list
 
