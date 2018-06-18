@@ -28,7 +28,7 @@ let special_builtins = [
     "exit"; "export"; "readonly"; "return"; "set";
     "shift"; "times"; "trap"; "unset" ]
 (* cd is not in that list because it is technically not a special built-in! *)
-
+                     
 let rec word__to__name = function
   | [Name l] -> l (* FIXME: we probably want to exclude characters here *)
   | [Literal l] -> l (* ? *)
@@ -83,8 +83,14 @@ and word__to__expression word =
   |> List.flatten
 
 and word__to__pattern_component = function
-  | [Literal l] -> AST.PLiteral l
-  | _ -> raise (NotSupported "pattern other than literal")
+  | [Name l] | [Literal l] -> AST.PLiteral l
+  | [] -> raise (NotSupported "empty pattern")
+  | _ :: _ :: _ -> raise (NotSupported "pattern of size >= 2")
+  | [GlobAll] -> raise (NotSupported "pattern globall")
+  | [GlobAny] -> raise (NotSupported "pattern globany")
+  | [Variable _] -> raise (NotSupported "pattern variable")
+  | [Assignment _] -> raise (NotSupported "pattern assignment")
+  | _ -> raise (NotSupported "other patterns")
 
 and pattern__to__pattern pattern =
   List.map word__to__pattern_component pattern
@@ -185,11 +191,13 @@ and command__to__statement = function
   | HereDocument _ ->
      raise (NotSupported ("here document"))
 
-and case_item__to__case_item = function
-  | (pattern, Some command) ->
-     (pattern__to__pattern pattern, command__to__statement command)
-  | (_, None) ->
-     raise (NotSupported ("case item with empty command"))
+and case_item__to__case_item (pattern, command) =
+  (
+    pattern__to__pattern pattern,
+    match command with
+    | Some command -> command__to__statement command
+    | None -> AST.Call ("true", [])
+  )
 
 and redirection__to__statement = function
   (* >=2 redirected to /dev/null. Since they don't have any impact on

@@ -34,7 +34,8 @@ and expression = expression_component list
 
 and pattern_component =
   | PLiteral of string
-
+  | PAll
+              
 and pattern =
   pattern_component list
 
