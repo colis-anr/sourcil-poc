@@ -28,9 +28,9 @@ type expression_component =
   | EVariable of name
   | ESplitVariable of name
   | ESubshell of statement_list
-  | ESplitSubshell of statement_list                            [@@deriving show]
+  | ESplitSubshell of statement_list
 
-and expression = expression_component list                      [@@deriving show]
+and expression = expression_component list
 
 and pattern_component =
   | PLiteral of string
@@ -38,28 +38,24 @@ and pattern_component =
 and pattern =
   pattern_component list
 
-and call = name * expression list                              [@@deriving show]
-
-and condition =
-  | CCall of call (* invariant : pure *)
-  | CIgnore of condition
-  | CAnd of condition * condition
-  | COr of condition * condition
-  | CNot of condition                                          [@@deriving show]
-
 and statement =
-  | SAssign of name * expression
-  | SSeq of statement * statement
-  | SCall of call (*FIXME: Call, CallFunction, CallBuiltin?*)
-  | SSubshell of statement_list
-  | SIf of condition * statement * statement
-  | SPipe of statement * statement
-  | SWhile of condition * statement
-  | SCase of expression * case_item list
-  | SIgnore of statement
-  | SForeach of name * literal list * statement                 [@@deriving show]
+  | Assign of name * expression
+  | Seq of statement * statement
+  | Subshell of statement
+  | If of statement * statement * statement
+  | Pipe of statement * statement
+  | While of statement * statement
+  | Case of expression * case_item list
+  | Ignore of statement
+  | Foreach of name * literal list * statement
+  | Not of statement
+  | Call of name * expression list
+  | CallFunction of name * expression list
+  | CallSpecial of name * expression list (* FIXME: constructors of type statement *)
 
 and case_item =
   pattern * statement
 
-and statement_list = statement list                            [@@deriving show]
+and statement_list = statement list
+
+[@@deriving show]
