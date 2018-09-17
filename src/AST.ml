@@ -22,8 +22,6 @@
 
 type name = string
 
-and literal = string
-
 and split = bool
 
 and return_code =
@@ -54,7 +52,7 @@ and statement =
   | While of statement * statement
   | Case of expression * case_item list
   | Ignore of statement
-  | Foreach of name * literal list * statement
+  | Foreach of name * expression list * statement
   | Not of statement
 
   | Call of name * expression list
@@ -62,8 +60,14 @@ and statement =
 
   | EnterStrictMode (* set -e *)
   | LeaveStrictMode (* set +e *)
+  | Break
+  | Continue
   | Exit_ of return_code
   | Return of return_code
+
+  | Source of string
+    (* FIXME: source a Shell file (or should we replace them
+       on the fly by the converted content?) *)
 
 and case_item =
   pattern * statement

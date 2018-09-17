@@ -47,22 +47,16 @@ let rec word__to__name = function
 and word'__to__name word' =
   on_located word__to__name word'
 
-and word__to__literal = function
-  | [Literal l] -> l
-  | _ -> raise (NotSupported "literal other than literal")
-
 and word_component_double_quoted__to__expression_component = function
   | Name n -> AST.ELiteral n
   | Literal l -> AST.ELiteral l
   | Variable (v, NoAttribute) -> AST.EVariable (false, v)
   | Subshell c -> AST.ESubshell (false, program__to__statement c)
 
-  | Variable _ -> raise (NotSupported "variable with attribute in double quotes")
-  | DoubleQuoted _ -> assert false
-  | GlobAll -> assert false
-  | GlobAny -> assert false
-  | GlobRange _ -> assert false
-  | Assignment _ -> assert false
+  | Variable _ ->
+     raise (NotSupported "variable with attribute in double quotes")
+  | DoubleQuoted _ | GlobAll | GlobAny | GlobRange _ | Assignment _ ->
+     assert false
 
 and word_double_quoted__to__expression word =
   List.map word_component_double_quoted__to__expression_component word
@@ -138,10 +132,18 @@ and command__to__statement = function
 
        (* Special builtins *)
 
+       | ".", [[AST.ELiteral s]] ->
+          AST.Source s
+
+       | "break", [] ->
+          AST.Break
+       | "continue", [] ->
+          AST.Continue
+
        | "eval", _ ->
           raise (NotSupported "eval")
 
-       | "exit", [] ->
+       | "exit", [] | "exit", [[AST.EVariable (_, "?")]] ->
           AST.(Exit_ Previous)
        | "exit", [[AST.ELiteral n]] when int_of_string_opt n = Some 0 ->
           AST.(Exit_ Success)
@@ -154,7 +156,6 @@ and command__to__statement = function
           AST.(Return Success)
        | "return", [[AST.ELiteral n]] when int_of_string_opt n <> None ->
           AST.(Return Failure_)
-
 
        | "set", [[AST.ELiteral "-e"]] ->
           AST.EnterStrictMode
@@ -225,7 +226,7 @@ and command__to__statement = function
 
   | For (name, Some literals, command') ->
      let statement = command'__to__statement command' in
-     AST.Foreach (name, List.map word__to__literal literals, statement)
+     AST.Foreach (name, List.map word__to__expression literals, statement)
 
   | Case (w, cil) ->
      let cil =
