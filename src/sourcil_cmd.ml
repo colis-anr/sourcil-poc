@@ -28,10 +28,10 @@ let () =
          ignore (Sourcil.parse_file filename);
          exit 0
        with
-       | Morsmall.SyntaxError(_position, message) ->
-          Format.eprintf "syntax error: %s@." message;
+       | Morsmall.SyntaxError _position ->
+          Format.eprintf "syntax error@.";
           exit 2
-       | Sourcil.NotSupported(message) ->
+       | Sourcil.NotSupported message ->
           Format.printf "non-supported feature: %s@." message;
           exit 3
      )
