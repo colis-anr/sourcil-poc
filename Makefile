@@ -1,19 +1,19 @@
 .PHONY: build install uninstall doc clean
 
 build:
-	jbuilder build @install
+	dune build @install
 	ln -sf _build/install/default/bin bin
 
 install:
-	jbuilder install
+	dune install
 
 uninstall:
-	jbuilder uninstall
+	dune uninstall
 
 doc:
-	jbuilder build @doc
+	dune build @doc
 	ln -sf _build/default/_doc doc
 
 clean:
-	jbuilder clean
+	dune clean
 	rm -f bin doc
