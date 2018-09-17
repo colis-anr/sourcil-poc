@@ -25,6 +25,11 @@ type literal = string                                          [@@deriving show]
 
 type split = bool                                              [@@deriving show]
 
+type return_code =
+  | Success
+  | Failure_
+  | Previous                                                   [@@deriving show]
+           
 type expression_component =
   | ELiteral of string
   | EVariable of split * name
@@ -50,10 +55,15 @@ and statement =
   | Ignore of statement
   | Foreach of name * literal list * statement
   | Not of statement
+
   | Call of name * expression list
   | CallFunction of name * expression list
-  | CallSpecial of name * expression list (* FIXME: constructors of type statement *)
 
+  | EnterStrictMode (* set -e *)
+  | LeaveStrictMode (* set +e *)
+  | Exit_ of return_code
+  | Return of return_code
+           
 and case_item =
   pattern * statement
 

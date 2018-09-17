@@ -24,7 +24,7 @@ open Morsmall.AST
 open Errors
 
 let on_located = Morsmall.Location.on_located
-   
+
 let special_builtins = [
     "break"; ":"; "continue"; "."; "eval"; "exec";
     "exit"; "export"; "readonly"; "return"; "set";
@@ -46,7 +46,7 @@ let rec word__to__name = function
 
 and word'__to__name word' =
   on_located word__to__name word'
-                 
+
 and word__to__literal = function
   | [Literal l] -> l
   | _ -> raise (NotSupported "literal other than literal")
@@ -91,7 +91,7 @@ and word__to__expression word =
 
 and word'__to__expression word' =
   on_located word__to__expression word'
-  
+
 and word__to__pattern_component = function
   | [Name l] | [Literal l] -> AST.PLiteral l
   | [] -> raise (NotSupported "empty pattern")
@@ -107,13 +107,13 @@ and pattern__to__pattern pattern =
 
 and pattern'__to__pattern pattern' =
   on_located pattern__to__pattern pattern'
-  
+
 and assignment__to__assign ((variable, word): assignment) =
   AST.Assign (variable, word__to__expression word)
 
 and assignment'__to__assign (assignment': assignment') =
   on_located assignment__to__assign assignment'
-  
+
 (* Morsmall.AST.command -> Sourcil.AST.statement *)
 
 and command__to__statement = function
@@ -132,30 +132,64 @@ and command__to__statement = function
   | Simple (assignment'_list, word' :: word'_list) ->
      let name = word'__to__name word' in
      let args = List.map word'__to__expression word'_list in
-     if name = "eval" then
-       raise (NotSupported "eval")
-     else if List.mem name special_builtins then
-       (
-         assert (assignment'_list = []);
-         AST.CallSpecial (name, args)
-       )
-         (* FIXME: functions and cd *)
-     else
-       (
-         let command =
-           List.fold_right
-             (fun assignment' statement ->
-               let assign = assignment'__to__assign assignment' in
-               (* FIXME: export *)
-               AST.Seq (assign, statement))
-             assignment'_list
-             (AST.Call (name, args))
-         in
-         AST.Subshell command
-       )
+     assert (assignment'_list = []);
+     (
+       match name, args with
+       (* Special builtins *)
+
+       | "eval", _ ->
+          raise (NotSupported "eval")
+
+       | "exit", [] ->
+          AST.(Exit_ Previous)
+       | "exit", [[AST.ELiteral n]] when int_of_string_opt n = Some 0 ->
+          AST.(Exit_ Success)
+       | "exit", [[AST.ELiteral n]] when int_of_string_opt n <> None ->
+          AST.(Exit_ Failure_)
+
+       | "return", [] ->
+          AST.(Return Previous)
+       | "return", [[AST.ELiteral n]] when int_of_string_opt n = Some 0 ->
+          AST.(Return Success)
+       | "return", [[AST.ELiteral n]] when int_of_string_opt n <> None ->
+          AST.(Return Failure_)
+
+
+       | "set", [[AST.ELiteral "-e"]] ->
+          AST.EnterStrictMode
+       | "set", [[AST.ELiteral "+e"]] ->
+          AST.LeaveStrictMode
+
+       (* All the other special builtins: unsupported *)
+
+       | _ when List.mem name special_builtins ->
+          raise (NotSupported ("special builtin: " ^ name))
+
+       (* cd: not a special builtin, but still deserves a special
+          treatement *)
+
+       | "cd", _ ->
+          raise (NotSupported "cd")
+
+       (* FIXME: functions *)
+
+       (* all the other commands *)
+
+       | _ ->
+          let command =
+            List.fold_right
+              (fun assignment' statement ->
+                let assign = assignment'__to__assign assignment' in
+                (* FIXME: export *)
+                AST.Seq (assign, statement))
+              assignment'_list
+              (AST.Call (name, args))
+          in
+          AST.Subshell command
+     )
 
   | Async _ ->
-     raise (NotSupported ("the asynchronous separator & is not supported"))
+     raise (NotSupported "asynchronous separator &")
 
   | Seq (first', second') ->
      let first = command'__to__statement first' in
@@ -231,7 +265,7 @@ and command__to__statement = function
 
 and command'__to__statement command' =
   on_located command__to__statement command'
-    
+
 and case_item__to__case_item (pattern', command'_option) =
   (
     pattern'__to__pattern pattern',
@@ -242,7 +276,7 @@ and case_item__to__case_item (pattern', command'_option) =
 
 and case_item'__to__case_item (case_item': case_item') =
   on_located case_item__to__case_item case_item'
-  
+
 and redirection__to__statement = function
   (* >=2 redirected to /dev/null. Since they don't have any impact on
      the semantics of the program, we don't care. *)
