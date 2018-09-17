@@ -20,17 +20,18 @@
 (*                                                                            *)
 (******************************************************************************)
 
-type name = string                                             [@@deriving show]
-type literal = string                                          [@@deriving show]
+type name = string
 
-type split = bool                                              [@@deriving show]
+and literal = string
 
-type return_code =
+and split = bool
+
+and return_code =
   | Success
   | Failure_
-  | Previous                                                   [@@deriving show]
-           
-type expression_component =
+  | Previous
+
+and expression_component =
   | ELiteral of string
   | EVariable of split * name
   | ESubshell of split * statement
@@ -63,7 +64,7 @@ and statement =
   | LeaveStrictMode (* set +e *)
   | Exit_ of return_code
   | Return of return_code
-           
+
 and case_item =
   pattern * statement
 
